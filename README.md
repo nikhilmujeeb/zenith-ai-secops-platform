@@ -1,8 +1,8 @@
-# Zenith AI-Native SecOps Platform
+# Zenith AI SecOps Platform
 
-An offline-first security operations assessment demo. It preserves source submissions, flags data-quality problems, groups only evidence-linked events, and creates a deterministic shift briefing. It runs on a normal CPU-only laptop without a GPU, paid API key, cloud account, or external service.
+An offline-first security operations demo for ingesting events, preserving their original submissions, explaining data-quality findings, grouping evidence-linked events, and producing a shift briefing. The local application runs on a CPU-only laptop without a GPU, paid API key, or cloud service.
 
-## Stack
+## Technology stack
 
 - **Language:** Python 3.10+
 - **Database:** SQLite with WAL mode and indexed event, quality, and incident records
@@ -15,7 +15,7 @@ An offline-first security operations assessment demo. It preserves source submis
 
 The application runtime does not call a language model or external AI service. OpenAI Codex was used to help implement and review this assessment project. The deterministic fallback is the normal runtime path, not a degraded mode.
 
-## Project structure and architecture
+## Project layout and architecture
 
 ```text
 app/                 Python API, browser UI, PWA manifest, icons, and service worker
@@ -41,15 +41,43 @@ The browser UI sends JSON to the standard-library `ThreadingHTTPServer`. The API
 - Rules-based reasoning keeps results repeatable and evidence-grounded offline. It is easier to audit but less flexible than a domain-tuned language model.
 - The PWA uses plain browser files with no build pipeline. It installs from an HTTPS origin; it is not a separately packaged Play Store APK.
 
-## Run locally
+## Setup and run
 
-From the project root, on Windows:
+### Prerequisites
+
+Install Python 3.10 or newer. The app uses only the Python standard library, so no `pip install` step is required. Docker is optional.
+
+### Start the app
+
+From the project root on Windows:
 
 ```powershell
-.\run.ps1
+powershell -ExecutionPolicy Bypass -File .\run.ps1
 ```
 
-The launcher uses Python from `PATH` when available, then falls back to Codex's bundled Python on this machine. On another OS, run `python app/server.py`. Open <http://127.0.0.1:8000>. The database is created at `data/secops.db`. Stop the app with `Ctrl+C`. Set `PORT` or `SECOPS_DB` to change the defaults.
+The Windows launcher uses Python from `PATH`; this development environment also has a bundled Python fallback. On macOS or Linux, run:
+
+```sh
+python3 app/server.py
+```
+
+Open <http://127.0.0.1:8000>. The server creates the SQLite database at `data/secops.db` on first start. Keep the terminal open while using the app and press `Ctrl+C` to stop it. Set `PORT` or `SECOPS_DB` before startup to change the port or database path.
+
+### Load the walkthrough data
+
+In a second terminal, from the project root, run:
+
+```powershell
+python tools/seed.py
+```
+
+Or on macOS/Linux:
+
+```sh
+python3 tools/seed.py
+```
+
+The seven curated events demonstrate cross-source vehicle evidence, a delayed low-confidence observation, a device-health alert, and an event with incomplete location. Re-running the seed preserves existing rows and records repeated submissions.
 
 ### Share a protected HTTPS demo
 
@@ -74,14 +102,6 @@ Open <http://127.0.0.1:8000>.
 ### Install on a phone or tablet
 
 Open the app from an HTTPS URL in a supported mobile browser, then choose **Install app** or **Add to Home Screen** from the browser menu. On iPhone/iPad, use Safari's Share menu and select **Add to Home Screen**. The PWA uses the same backend as the desktop UI; the server must be reachable by the phone. Service-worker installation requires HTTPS (or localhost on the same device). The app shell and previously viewed read-only pages can be opened offline; ingest and incident updates require the server connection.
-
-Load the seven curated walkthrough events from another terminal:
-
-```powershell
-python tools/seed.py
-```
-
-The sample demonstrates cross-source vehicle evidence, a delayed low-confidence observation, a device-health alert, and an event with incomplete location. Repeated ingestion preserves the existing rows and records the repeated submissions.
 
 ## Generate sample data
 
@@ -216,6 +236,8 @@ The `source_type` enum contains all 15 supported categories. Payload fields belo
 
 ## Demo guide (under 5 minutes)
 
+[Watch the project walkthrough](https://drive.google.com/file/d/1xh_BDyAQEJdkuXm39rmS_Pkg8V2NoIQJ/view?usp=sharing).
+
 Estimated total: 4–5 minutes.
 
 1. (30 sec) Start the server, seed sample events, and open the dashboard.
@@ -228,4 +250,5 @@ Estimated total: 4–5 minutes.
 ## Verification results
 
 The latest Windows run passed all six automated integration tests in 29.6 seconds. It includes a 50,000-event batch ingest and API pagination check; a separate 1,000-event adversarial fixture checks known related and unrelated pairs while keeping labels outside event input. Other checks cover preservation, duplicates and conflicts, malformed input, data-quality explanations, out-of-order arrivals, assistant evidence, and confirmation-gated actions. The elapsed time is one local run, not a performance guarantee across machines. Run `make test` or `test.ps1` to reproduce the results on the current code.
+
 
