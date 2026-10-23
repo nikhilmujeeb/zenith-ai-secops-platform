@@ -1,0 +1,6 @@
+__pycache__/
+*.py[cod]
+data/*.db*
+work/
+outputs/secops_50000_unique_plus_2_duplicates.json
+

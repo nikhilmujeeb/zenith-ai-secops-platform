@@ -1,0 +1,19 @@
+{
+  "id": "/",
+  "name": "Zenith AI SecOps Platform",
+  "short_name": "Zenith SecOps",
+  "description": "Local security operations incidents, evidence, and briefings.",
+  "start_url": "/",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "any",
+  "background_color": "#090d12",
+  "theme_color": "#090d12",
+  "categories": ["business", "productivity", "utilities"],
+  "icons": [
+    {"src": "/app-icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any"},
+    {"src": "/app-icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any"},
+    {"src": "/app-icon.svg", "sizes": "any", "type": "image/svg+xml", "purpose": "any"}
+  ]
+}
+
