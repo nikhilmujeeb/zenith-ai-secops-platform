@@ -1,7 +1,8 @@
 """Offline-first SecOps demo API and web server. Uses only Python's standard library."""
 from __future__ import annotations
 import base64, json, os, re, sqlite3, threading, hashlib, math, uuid, hmac
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
+from bisect import bisect_left
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
 from urllib.parse import urlparse, parse_qs
@@ -176,21 +177,39 @@ def rebuild_incidents():
         ev=[dict(r) for r in c.execute('SELECT * FROM events ORDER BY occurred_at,event_id')]
         # Clear and deterministically rebuild derived views; supports delayed/out-of-order arrivals.
         c.execute('DELETE FROM incident_events'); c.execute('DELETE FROM incidents')
-        groups=[]; entity_groups={}; burst_groups={}
+        groups=[]; entity_groups={}; burst_groups={}; valid_group_times=[]; valid_group_indices=[]
         for e in ev:
             dt=parse_dt(e['occurred_at']); payload=json.loads(e['payload'] or '{}')
             entity=str(payload.get('vehicle_id') or payload.get('plate') or payload.get('subject_id') or '').strip().lower()
             lat,lon=e['latitude'],e['longitude']; chosen=None
             candidate_ids=[]
-            if entity: candidate_ids.extend(entity_groups.get(entity,[]))
-            if e['device_id'] and e['event_type']: candidate_ids.extend(burst_groups.get((e['device_id'],e['event_type']),[]))
-            seen=set()
-            for gi in reversed(candidate_ids):
-                if gi in seen: continue
-                seen.add(gi); g=groups[gi]
+            if dt:
+                # Bound lookups to groups whose first event is within the
+                # correlation window. Both per-key group lists are append-only
+                # and ordered, so bisect avoids repeatedly scanning history.
+                cutoff=dt-timedelta(seconds=1200)
+                pos=bisect_left(valid_group_times,cutoff)
+                min_group_index=valid_group_indices[pos] if pos<len(valid_group_indices) else len(groups)
+                if entity:
+                    entity_index=entity_groups.get(entity,{})
+                    same_sensor=(e['source_type'],e['device_id'])
+                    for sensor_key,candidates in entity_index.items():
+                        # The correlation rule requires a different source or
+                        # device, so repeated records from this exact sensor
+                        # can be skipped without scanning their full history.
+                        if sensor_key==same_sensor: continue
+                        candidate_ids.extend(candidates[bisect_left(candidates,min_group_index):])
+                if e['device_id'] and e['event_type']:
+                    candidates=burst_groups.get((e['device_id'],e['event_type']),[])
+                    candidate_ids.extend(candidates[bisect_left(candidates,min_group_index):])
+            # Merge the bounded candidate tails newest-first; a group can be
+            # indexed by both its identity and its device burst key.
+            for gi in sorted(set(candidate_ids),reverse=True):
+                g=groups[gi]
                 first=g[0]; fdt=parse_dt(first['occurred_at']); fp=json.loads(first['payload'] or '{}')
                 ge=str(fp.get('vehicle_id') or fp.get('plate') or fp.get('subject_id') or '').strip().lower()
-                if not dt or not fdt or abs((dt-fdt).total_seconds())>1200: continue
+                if not fdt: continue
+                delta=(dt-fdt).total_seconds()
                 samezone=bool(e['zone'] and first['zone'] and e['zone'].lower()==first['zone'].lower())
                 sameentity=bool(entity and ge and entity==ge)
                 dist=None
@@ -203,8 +222,12 @@ def rebuild_incidents():
                 if e['device_id']==first['device_id'] and e['event_type']==first['event_type'] and abs((dt-fdt).total_seconds())<=90: chosen=g; break
             if chosen is None:
                 gi=len(groups); groups.append([e])
-                if entity: entity_groups.setdefault(entity,[]).append(gi)
-                if e['device_id'] and e['event_type']: burst_groups.setdefault((e['device_id'],e['event_type']),[]).append(gi)
+                if dt:
+                    valid_group_times.append(dt); valid_group_indices.append(gi)
+                    if entity:
+                        sensor_key=(e['source_type'],e['device_id'])
+                        entity_groups.setdefault(entity,{}).setdefault(sensor_key,[]).append(gi)
+                    if e['device_id'] and e['event_type']: burst_groups.setdefault((e['device_id'],e['event_type']),[]).append(gi)
             else: chosen.append(e)
         # Device bursts and per-device event-time reversals are quality signals.
         by_device={}
@@ -227,9 +250,9 @@ def rebuild_incidents():
                 c.execute('INSERT OR IGNORE INTO quality(event_id,kind,severity,reason) VALUES(?,?,?,?)',(items[-1]['event_id'],'repeated_device','medium',f'{len(items)} events originated from {device}; check for a stuck sensor, replay, or a genuine hotspot.'))
             for typ,vals in by_type.items():
                 vals.sort()
+                start=0
                 for j,(dt,eid) in enumerate(vals):
-                    start=j
-                    while start>0 and (dt-vals[start-1][0]).total_seconds()<=300: start-=1
+                    while start<j and (dt-vals[start][0]).total_seconds()>300: start+=1
                     if j-start+1>=10:
                         c.execute('INSERT OR IGNORE INTO quality(event_id,kind,severity,reason) VALUES(?,?,?,?)',(eid,'event_spike','medium',f'{j-start+1} {typ} events from {device} occurred within five minutes.'))
                         break
@@ -835,4 +858,5 @@ if __name__=='__main__':
             print(f'Background incident rebuild failed: {error}',flush=True)
     threading.Thread(target=rebuild_after_startup,name='incident-rebuild',daemon=True).start()
     server.serve_forever()
+
 
