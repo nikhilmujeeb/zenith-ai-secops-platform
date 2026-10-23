@@ -24,7 +24,6 @@ data/secops.db       Persistent SQLite database created on first start (ignored 
 tools/seed.py        Loads the walkthrough events into the running app
 tools/generate.py    Reproducible clean or adversarial JSONL generator
 tests/               Isolated API, data-quality, correlation, and 50k-event tests
-outputs/             Example generated assessment input
 run.ps1              Windows startup
 run-public.ps1       Temporary authenticated HTTPS demo tunnel
 test.ps1             Windows one-command test runner
@@ -91,6 +90,8 @@ Create a reproducible 50,000-event JSONL dataset locally:
 ```powershell
 python tools/generate.py --count 50000 --seed 41 --output data/generated_50k.jsonl
 ```
+
+Generated benchmark files are created locally on demand and are not checked into the source repository. The generator and small seed dataset are included.
 
 The generated fixture includes exact duplicate submissions, malformed and incomplete records, delayed and out-of-order events, conflicting sensor observations, device failures, low-confidence detections, access-control spikes, related events, and unrelated events at the same time and place. Use `--clean` to generate only valid records without the injected quality cases.
 
@@ -227,5 +228,4 @@ Estimated total: 4–5 minutes.
 ## Verification results
 
 The latest Windows run passed all six automated integration tests in 29.6 seconds. It includes a 50,000-event batch ingest and API pagination check; a separate 1,000-event adversarial fixture checks known related and unrelated pairs while keeping labels outside event input. Other checks cover preservation, duplicates and conflicts, malformed input, data-quality explanations, out-of-order arrivals, assistant evidence, and confirmation-gated actions. The elapsed time is one local run, not a performance guarantee across machines. Run `make test` or `test.ps1` to reproduce the results on the current code.
-
 
